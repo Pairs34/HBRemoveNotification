@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Support.UI;
@@ -20,7 +22,25 @@ namespace HBRemoveNotification
             {
             }
         }
-        
+
+        public static void KillAllDrivers()
+        {
+            new[] { "geckodriver", "chromedriver" }.ForEach((x) =>
+            {
+                foreach (var process in Process.GetProcessesByName(x))
+                {
+                    process.Kill();
+                }
+            });
+        }
+        public static void ForEach<T>(this IEnumerable<T> enumeration, Action<T> action)
+        {
+            foreach (T item in enumeration)
+            {
+                action(item);
+            }
+        }
+
         public static IWebElement IsElementPresent(this IWebDriver driver, By by,int timeout = 25)
         {
             IWebElement Founded = null;
@@ -49,7 +69,20 @@ namespace HBRemoveNotification
 
             return Founded;
         }
-        
+
+        public static object RunJsCommand(this IWebDriver driver, string jsCommand, object[] options = null)
+        {
+            IJavaScriptExecutor javaScriptExecutor = (IJavaScriptExecutor)driver;
+            if (options != null)
+            {
+                return javaScriptExecutor.ExecuteScript(jsCommand, options);
+            }
+            else
+            {
+                return javaScriptExecutor.ExecuteScript(jsCommand);
+            }
+        }
+
         public static void WaitSomeSecond(int second)
         {
             Thread.Sleep(TimeSpan.FromSeconds(second));

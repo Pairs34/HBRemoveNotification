@@ -5,6 +5,8 @@ using System.Threading;
 using Newtonsoft.Json;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Edge;
+using OpenQA.Selenium.Firefox;
+using OpenQA.Selenium.Interactions;
 using OpenQA.Selenium.Opera;
 using WebDriverManager;
 using WebDriverManager.DriverConfigs.Impl;
@@ -18,16 +20,23 @@ namespace HBRemoveNotification
         public static void Main(string[] args)
         {
             new DriverManager().SetUpDriver(new OperaConfig(), "Latest", Architecture.Auto);
-
+            string OperaProfilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Opera Software\\Opera Stable");
             var jsonText = File.ReadAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"accounts.json"));
             var jsonAccounts = JsonConvert.DeserializeObject<List<Account>>(jsonText);
+            OperaOptions opt = new OperaOptions();
+            opt.PageLoadStrategy = PageLoadStrategy.Eager;
+            opt.AddArgument($"user-data-dir={OperaProfilePath}");
+            opt.AddArguments(new[] { "--incognito" });
+            opt.AddAdditionalCapability("useAutomationExtension", false);
+            opt.AddExcludedArgument("enable-automation");
 
-            foreach (var jsonAccount in jsonAccounts)
+            OperaDriverService driverService = OperaDriverService.CreateDefaultService();
+            driverService.HideCommandPromptWindow = true;
+
+            for (int i = 0; i<= jsonAccounts.Count;i++)
             {
-                OperaOptions opt = new OperaOptions();
-                opt.AddArguments(new []{ "--incognito" });
-                opt.AddArgument($"user-data-dir={Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Opera Software\\Opera Stable")}");
-                IWebDriver driver = new OperaDriver(options:opt);
+                KillAllDrivers();
+                IWebDriver driver = new OperaDriver(driverService,opt);
                 try
                 {
                     driver.Url = "https://giris.hepsiburada.com";
@@ -42,39 +51,73 @@ namespace HBRemoveNotification
                     {
                         throw new Exception("CANNOT_FIND_LOGINPAGE");
                     }
+                    elMail.Click();
                     elMail?.Clear();
-                    elMail?.SendKeys(jsonAccount.name);
+                    elMail?.SendKeys(jsonAccounts[i].name);
                     WaitSomeSecond(1);
                     elPass?.Clear();
-                    elPass?.SendKeys(jsonAccount.pass);
+                    elPass?.SendKeys(jsonAccounts[i].pass);
                     WaitSomeSecond(1);
-                    elBtnLogin.Click();
+                    var touchActions = new Actions(driver);
+                    touchActions.MoveToElement(elBtnLogin).Perform();
+                    touchActions.SendKeys(Keys.Enter).Perform();
                     WaitSomeSecond(1);
 
                     driver.WaitForPageLoad();
 
-                    WaitSomeSecond(3);
-                
+                    WaitSomeSecond(6);
+
+                    if (!CheckIsLoggedorRegistered(driver,true))
+                        throw new Exception("CANNOT_LOGIN");
+
                     driver.Navigate().GoToUrl("https://hesabim.hepsiburada.com/iletisim-tercihlerim");
                 
                     driver.WaitForPageLoad();
 
-                    var elNotification = driver.IsElementPresent(By.XPath("//input[@id='isSendEmailAvailable']"));
+                    WaitSomeSecond(5);
 
-                    if (elNotification != null)
+                    var mailNotify = driver.RunJsCommand("return document.querySelector('div.x0LYwM_8u4ipmQOzUpbEM:nth-child(2) > div:nth-child(2) > div:nth-child(1) > label:nth-child(1) > span:nth-child(2)');");
+
+                    if (mailNotify != null)
                     {
-                        elNotification.Click();
+                        driver.RunJsCommand("arguments[0].click()", new []{mailNotify});
+                        Console.WriteLine($"{jsonAccounts[i].name} başarılı");
+                        WaitSomeSecond(3);
+                    }
+                    else
+                    {
+                        throw new Exception("CANNOT_FOUND_MAIL_NOTIFY");
                     }
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine($"Hesap Adı : {jsonAccount.name}");
+                    Console.WriteLine($"Hesap Adı : {jsonAccounts[i].name}");
                     Console.WriteLine(e);
-                    Thread.Sleep(new Random().Next(5,10));
+                    Thread.Sleep(TimeSpan.FromSeconds(new Random().Next(5, 10)));
                 }
                 driver.Quit();
-                Thread.Sleep(new Random().Next(30,70));
+                Thread.Sleep(TimeSpan.FromSeconds(new Random().Next(30, 70)));
             }
+        }
+        public static bool CheckIsLoggedorRegistered(IWebDriver driver,bool isLogin = false)
+        {
+            bool isExistErrorBoxElement;
+            try
+            {
+                if (isLogin)
+                    driver.FindElement(By.XPath("//div[@type='ERROR']"));
+                else
+                    driver.FindElement(By.XPath("//div[@type='WARNING']"));
+
+
+                isExistErrorBoxElement = false;
+            }
+            catch
+            {
+                isExistErrorBoxElement = true;
+            }
+
+            return isExistErrorBoxElement;
         }
     }
 }
